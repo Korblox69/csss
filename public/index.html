@@ -1,31 +1,53 @@
-<style>
-    #shop {
-        position: fixed;
-        left: 20px;
-        top: 20px;
-        background: rgba(0,0,0,0.8);
-        color: white;
-        padding: 15px;
-        border-radius: 8px;
-    }
-    .weapon {
-        margin: 10px 0;
-        padding: 8px;
-        background: #2a2a2a;
-        cursor: pointer;
-    }
-    #round-info {
-        position: fixed;
-        top: 20px;
-        left: 50%;
-        transform: translateX(-50%);
-        color: white;
-        font-size: 24px;
-    }
-</style>
-
-<div id="round-info">
-    Round <span id="round-number">1</span> | 
-    Phase: <span id="round-phase">BUY</span> | 
-    Time: <span id="round-timer">20</span>
-</div>
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CS2 Web Defusal</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        canvas { display: block; }
+        
+        #shop {
+            position: fixed;
+            left: 20px;
+            top: 20px;
+            background: rgba(0,0,0,0.9);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            width: 200px;
+        }
+        
+        .weapon {
+            padding: 8px;
+            margin: 5px 0;
+            background: #2a2a2a;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        
+        #round-info {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+        }
+        
+        #health-bar {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            color: #ff4444;
+            font-size: 24px;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <script src="/game.js"></script>
+</body>
+</html>
