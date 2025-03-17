@@ -5,7 +5,7 @@ const { v4: uuidv4 } = require('uuid');
 const fetch = require('node-fetch');
 
 // Discord Webhook Configuration
-const WEBHOOK_URL = 'YOUR_WEBHOOK_URL';
+const WEBHOOK_URL = 'https://discord.com/api/webhooks/1350538405611831297/7kCExgLyhUB8bU03qk8YgkYfJkNuuPHcOGLA27ZL6YR9qrZswd0SqGfhUNo6t48WO8K';
 
 async function sendDiscordMessage(content) {
     try {
@@ -33,9 +33,9 @@ const wss = new WebSocket.Server({ server });
 
 // Game Constants
 const WEAPONS = {
-    pistol: { price: 300, damage: 25 },
-    rifle: { price: 2700, damage: 33 },
-    awp: { price: 4750, damage: 110 }
+    pistol: { price: 300, damage: 25, range: 5 },
+    rifle: { price: 2700, damage: 33, range: 8 },
+    awp: { price: 4750, damage: 110, range: 15 }
 };
 
 class GameServer {
@@ -43,10 +43,10 @@ class GameServer {
         this.players = new Map();
         this.bomb = { planted: false, site: null, timer: 40 };
         this.round = {
-            phase: 'waiting', // waiting → buy → live → ended
+            phase: 'waiting',
             timer: 0,
-            wins: { T: 0, CT: 0 },
-            number: 0
+            number: 0,
+            wins: { T: 0, CT: 0 }
         };
     }
 
@@ -65,9 +65,13 @@ class GameServer {
         this.players.forEach(player => {
             player.money += player.survived ? 1400 : 0;
             player.survived = false;
+            player.health = 100;
             player.weapons = ['knife'];
+            player.position = player.team === 'T' ? [-50, 0, 50] : [50, 0, -50];
         });
 
+        this.broadcast('roundUpdate', this.round);
+        
         const interval = setInterval(() => {
             this.round.timer--;
             this.broadcast('roundUpdate', this.round);
@@ -109,6 +113,7 @@ class GameServer {
 
         this.broadcast('roundEnd', { winner });
         setTimeout(() => this.startBuyPhase(), 10000);
+        sendDiscordMessage(`🏆 ${winner} won round ${this.round.number}`);
     }
 }
 
@@ -135,13 +140,22 @@ wss.on('connection', (ws) => {
                         money: 800,
                         health: 100,
                         weapons: ['knife'],
+                        position: msg.team === 'T' ? [-50, 0, 50] : [50, 0, -50],
                         survived: false
                     });
                     ws.team = msg.team;
                     
                     await sendDiscordMessage(`${msg.name} joined as ${msg.team}`);
-                    game.broadcast('playerUpdate', Array.from(game.players.values()));
+                    game.broadcast('playerUpdate', { players: Array.from(game.players.values()) });
                     if (game.round.phase === 'waiting') game.startBuyPhase();
+                    break;
+
+                case 'move':
+                    if (game.round.phase !== 'live') return;
+                    if (player && msg.position) {
+                        player.position = msg.position;
+                        game.broadcast('playerMoved', { id: ws.id, position: msg.position });
+                    }
                     break;
 
                 case 'buy':
@@ -150,26 +164,32 @@ wss.on('connection', (ws) => {
                     if (weapon && player.money >= weapon.price) {
                         player.money -= weapon.price;
                         player.weapons.push(msg.weapon);
-                        game.broadcast('playerUpdate', Array.from(game.players.values()));
+                        game.broadcast('playerUpdate', { players: Array.from(game.players.values()) });
                     }
                     break;
 
                 case 'shoot':
                     if (game.round.phase !== 'live') return;
                     const attacker = game.players.get(ws.id);
+                    const weaponType = attacker.weapons.find(w => w in WEAPONS) || 'pistol';
+                    const weapon = WEAPONS[weaponType];
+                    
                     game.players.forEach((target, id) => {
-                        if (id !== ws.id && calculateHit(attacker, target)) {
-                            const weapon = attacker.weapons.includes('rifle') ? 'rifle' : 'pistol';
-                            target.health -= WEAPONS[weapon].damage;
+                        if (id !== ws.id && 
+                            distance(attacker.position, target.position) < weapon.range &&
+                            Math.random() < 0.7 // Accuracy factor
+                        ) {
+                            target.health -= weapon.damage;
                             if (target.health <= 0) {
                                 attacker.money += 300;
-                                sendDiscordMessage(`${attacker.name} killed ${target.name} with ${weapon}`);
-                                game.broadcast('kill', { 
-                                    killer: attacker.name, 
+                                sendDiscordMessage(`${attacker.name} killed ${target.name} with ${weaponType}`);
+                                game.broadcast('kill', {
+                                    killer: attacker.name,
                                     victim: target.name,
-                                    weapon 
+                                    weapon: weaponType
                                 });
                             }
+                            game.broadcast('playerUpdate', { players: Array.from(game.players.values()) });
                         }
                     });
                     break;
@@ -181,13 +201,13 @@ wss.on('connection', (ws) => {
 
     ws.on('close', () => {
         game.players.delete(ws.id);
-        game.broadcast('playerLeft', ws.id);
+        game.broadcast('playerLeft', { id: ws.id });
     });
 });
 
-// Helper Functions
-function calculateHit(attacker, target) {
-    const dx = target.position.x - attacker.position.x;
-    const dz = target.position.z - attacker.position.z;
-    return Math.sqrt(dx*dx + dz*dz) < (attacker.weapon === 'awp' ? 10 : 5);
+function distance(pos1, pos2) {
+    return Math.sqrt(
+        Math.pow(pos2[0] - pos1[0], 2) +
+        Math.pow(pos2[2] - pos1[2], 2)
+    );
 }
