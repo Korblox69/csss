@@ -1,53 +1,132 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>CS2 Web Defusal</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multiplayer Shooter Game</title>
     <style>
-        body { margin: 0; overflow: hidden; }
-        canvas { display: block; }
-        
-        #shop {
-            position: fixed;
-            left: 20px;
-            top: 20px;
-            background: rgba(0,0,0,0.9);
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #333;
             color: white;
-            padding: 15px;
-            border-radius: 8px;
-            width: 200px;
         }
-        
-        .weapon {
-            padding: 8px;
-            margin: 5px 0;
-            background: #2a2a2a;
-            cursor: pointer;
-            border-radius: 4px;
+        canvas {
+            display: block;
+            margin: 0 auto;
+            background-color: #111;
+            border: 1px solid #444;
         }
-        
-        #round-info {
-            position: fixed;
-            top: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(0,0,0,0.7);
-            color: white;
-            padding: 10px 20px;
-            border-radius: 5px;
-        }
-        
-        #health-bar {
+        #controls {
             position: fixed;
             bottom: 20px;
-            left: 20px;
-            color: #ff4444;
-            font-size: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            justify-content: center;
+        }
+        button {
+            background-color: #444;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            margin: 0 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #666;
         }
     </style>
 </head>
 <body>
-    <canvas id="gameCanvas"></canvas>
-    <script src="/game.js"></script>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <div id="controls">
+        <button id="shootBtn">Shoot</button>
+        <button id="reloadBtn">Reload</button>
+    </div>
+    
+    <script src="https://cdn.socket.io/4.0.1/socket.io.min.js"></script>
+    <script>
+        const socket = io();
+
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        let player = { x: 400, y: 300, health: 100, ammo: 10, reloading: false };
+        let bullets = [];
+        let enemies = [];
+        
+        // Handle shooting event
+        document.getElementById('shootBtn').addEventListener('click', () => {
+            if (player.ammo > 0 && !player.reloading) {
+                player.ammo--;
+                bullets.push({ x: player.x, y: player.y, direction: 'right' });
+                socket.emit('shoot');
+            }
+        });
+
+        // Handle reload event
+        document.getElementById('reloadBtn').addEventListener('click', () => {
+            if (!player.reloading) {
+                player.reloading = true;
+                setTimeout(() => {
+                    player.ammo = 10;
+                    player.reloading = false;
+                    socket.emit('reload');
+                }, 2000); // 2-second reload time
+            }
+        });
+
+        // Listen for respawn event
+        socket.on('respawn', (data) => {
+            player.x = data.x;
+            player.y = data.y;
+            player.health = 100;
+            player.ammo = 10;
+            console.log(data.message);
+        });
+
+        // Listen for shooting event
+        socket.on('shootEvent', (data) => {
+            console.log('Shoot event triggered by player:', data.shooter);
+        });
+
+        // Listen for reload event
+        socket.on('reloadEvent', (data) => {
+            console.log('Reload event triggered by player:', data.player);
+        });
+
+        // Listen for player death
+        socket.on('death', (data) => {
+            alert(data.message);
+        });
+
+        // Game loop
+        function gameLoop() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = 'red';
+            ctx.fillRect(player.x, player.y, 50, 50); // Draw player
+            ctx.fillStyle = 'yellow';
+
+            // Draw bullets
+            bullets.forEach((bullet) => {
+                ctx.beginPath();
+                ctx.arc(bullet.x, bullet.y, 5, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            // Update bullets
+            bullets.forEach((bullet) => {
+                if (bullet.direction === 'right') {
+                    bullet.x += 5;
+                }
+            });
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        gameLoop();  // Start the game loop
+    </script>
 </body>
 </html>
