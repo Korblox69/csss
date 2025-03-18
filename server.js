@@ -1,59 +1,59 @@
-const WebSocket = require('ws');
-const server = new WebSocket.Server({ port: 8080 });
+const express = require('express');
+const http = require('http');
+const socketIo = require('socket.io');
+const axios = require('axios');
+
+const app = express();
+const server = http.createServer(app);
+const io = socketIo(server);
+
+const DISCORD_WEBHOOK_URL = 'https://discord.com/api/webhooks/1350538405611831297/7kCExgLyhUB8bU03qk8YgkYfJkNuuPHcOGLA27ZL6YR9qrZswd0SqGfhUNo6t48WO8KF';
 
 let players = {};
-let bullets = [];
-const BULLET_LIFETIME = 5000; // Bullet expires after 5 seconds
 
-server.on('connection', (ws) => {
-    const id = Math.random().toString(36).substr(2, 9);
-    players[id] = { x: Math.random() * 500, y: Math.random() * 500, money: 100, health: 100 };
+// Function to send Discord notifications
+const sendDiscordNotification = (message) => {
+  axios.post(DISCORD_WEBHOOK_URL, { content: message }).catch((err) => {
+    console.error('Error sending webhook:', err);
+  });
+};
 
-    // Send initial data to the new player
-    ws.send(JSON.stringify({ type: 'init', id, players }));
+// Handle player connection
+io.on('connection', (socket) => {
+  console.log(`Player connected: ${socket.id}`);
+  
+  // When a player joins, send them a respawn event
+  socket.emit('respawn', { message: 'You have respawned!', x: 0, y: 0 });
 
-    // Notify others
-    broadcast({ type: 'playerJoin', id, player: players[id] });
+  // Handle player shooting
+  socket.on('shoot', () => {
+    console.log(`Player ${socket.id} shot`);
+    // Here you would handle damage calculation and event firing
+    io.emit('shootEvent', { shooter: socket.id });
+  });
 
-    ws.on('message', (message) => {
-        let data;
-        try {
-            data = JSON.parse(message);
-        } catch (error) {
-            console.error("Invalid JSON received:", message);
-            return; // Ignore invalid messages
-        }
+  // Handle player reload
+  socket.on('reload', () => {
+    console.log(`Player ${socket.id} reloaded`);
+    io.emit('reloadEvent', { player: socket.id });
+  });
 
-        if (data.type === 'move' && players[id]) {
-            players[id].x = data.x;
-            players[id].y = data.y;
-            broadcast({ type: 'playerMove', id, x: data.x, y: data.y });
-        }
+  // Handle player kill event
+  socket.on('kill', (victimId) => {
+    console.log(`Player ${socket.id} killed ${victimId}`);
+    io.to(victimId).emit('death', { message: 'You died!' });
+    sendDiscordNotification(`Player ${socket.id} killed ${victimId}`);
+  });
 
-        if (data.type === 'shoot' && players[id]) {
-            const bullet = { id, x: data.x, y: data.y, timestamp: Date.now() };
-            bullets.push(bullet);
-            broadcast({ type: 'shoot', id, x: data.x, y: data.y });
-
-            // Remove bullet after lifetime expires
-            setTimeout(() => {
-                bullets = bullets.filter(b => b !== bullet);
-            }, BULLET_LIFETIME);
-        }
-    });
-
-    ws.on('close', () => {
-        delete players[id];
-        broadcast({ type: 'playerLeave', id });
-    });
+  // Handle player disconnection
+  socket.on('disconnect', () => {
+    console.log(`Player disconnected: ${socket.id}`);
+    delete players[socket.id];
+  });
 });
 
-function broadcast(data) {
-    server.clients.forEach(client => {
-        if (client.readyState === WebSocket.OPEN) {
-            client.send(JSON.stringify(data));
-        }
-    });
-}
-
-console.log("Server running on ws://localhost:8080");
+// Setup the server
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
